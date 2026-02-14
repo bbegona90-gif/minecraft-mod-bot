@@ -1,17 +1,20 @@
 import os
-from aiogram.client.default import DefaultBotProperties
 import asyncio
 import json
 import logging
 from aiogram import Bot, Dispatcher, F
-from aiogram.types import Message, CallbackQuery
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import Command
 from aiogram.enums import ParseMode
+from aiogram.client.default import DefaultBotProperties
 
+# ===== ENV =====
 TOKEN = os.getenv("8210579716:AAGtgHEAz3IDcB2mQH9T92Cg7zpSKG1zPj8")
 ADMIN_ID = 1331356868
 CHANNEL_USERNAME = "@blacklord_uz"
+
+if not TOKEN:
+    raise ValueError("BOT_TOKEN topilmadi!")
 
 logging.basicConfig(level=logging.INFO)
 
@@ -69,7 +72,7 @@ async def start(message: Message):
 
     await show_mods(message)
 
-# ================= MODLAR RO‘YXATI =================
+# ================= MODLAR =================
 
 async def show_mods(message):
     db = load_db()
@@ -86,8 +89,6 @@ async def show_mods(message):
     kb = InlineKeyboardMarkup(inline_keyboard=buttons)
     await message.answer("📦 Modni tanlang:", reply_markup=kb)
 
-# ================= MOD YUBORISH =================
-
 @dp.callback_query(F.data.startswith("mod_"))
 async def send_mod(callback: CallbackQuery):
     mod_id = int(callback.data.split("_")[1])
@@ -95,20 +96,16 @@ async def send_mod(callback: CallbackQuery):
 
     for mod in db["mods"]:
         if mod["id"] == mod_id:
-
             await callback.message.answer_photo(
                 mod["photo_id"],
                 caption=mod["caption"]
             )
-
-            await callback.message.answer_document(
-                mod["file_id"]
-            )
+            await callback.message.answer_document(mod["file_id"])
             break
 
     await callback.answer()
 
-# ================= ADMIN PANEL =================
+# ================= ADMIN =================
 
 @dp.message(Command("admin"))
 async def admin_panel(message: Message):
@@ -117,45 +114,22 @@ async def admin_panel(message: Message):
 
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="➕ Mod qo‘shish", callback_data="add_mod")],
-        [InlineKeyboardButton(text="🗑 Mod o‘chirish", callback_data="delete_mod")],
-        [InlineKeyboardButton(text="📊 Statistika", callback_data="stats")],
-        [InlineKeyboardButton(text="📢 Reklama", callback_data="broadcast")]
+        [InlineKeyboardButton(text="📊 Statistika", callback_data="stats")]
     ])
 
     await message.answer("👑 Admin panel", reply_markup=kb)
-
-# ================= MOD QO‘SHISH =================
 
 adding = {}
 
 @dp.callback_query(F.data == "add_mod")
 async def add_mod_start(callback: CallbackQuery):
     adding[callback.from_user.id] = {"step": "photo"}
-    await callback.message.answer("📷 Rasm yuboring (caption yozmang)")
-    await callback.answer()
-
-@dp.callback_query(F.data == "broadcast")
-async def broadcast_start(callback: CallbackQuery):
-    adding["broadcast"] = True
-    await callback.message.answer("📢 Yuboriladigan matnni yuboring")
+    await callback.message.answer("📷 Rasm yuboring")
     await callback.answer()
 
 @dp.message()
 async def all_messages_handler(message: Message):
 
-    # ===== BROADCAST =====
-    if adding.get("broadcast"):
-        users = load_users()
-        for user in users["users"]:
-            try:
-                await bot.send_message(user, message.text)
-            except:
-                pass
-
-        adding.pop("broadcast")
-        return await message.answer("✅ Reklama yuborildi")
-
-    # ===== ADD MOD =====
     if message.from_user.id not in adding:
         return
 
@@ -164,12 +138,12 @@ async def all_messages_handler(message: Message):
     if state["step"] == "photo" and message.photo:
         state["photo_id"] = message.photo[-1].file_id
         state["step"] = "caption"
-        return await message.answer("📝 Endi matn yuboring")
+        return await message.answer("📝 Matn yuboring")
 
     if state["step"] == "caption" and message.text:
         state["caption"] = message.text
         state["step"] = "file"
-        return await message.answer("📦 Endi APK yuboring")
+        return await message.answer("📦 APK yuboring")
 
     if state["step"] == "file" and message.document:
         state["file_id"] = message.document.file_id
@@ -190,30 +164,6 @@ async def all_messages_handler(message: Message):
 
         return await message.answer("✅ Mod saqlandi!")
 
-# ================= MOD O‘CHIRISH =================
-
-@dp.callback_query(F.data == "delete_mod")
-async def delete_list(callback: CallbackQuery):
-    db = load_db()
-    text = "ID yuboring:\n"
-    for mod in db["mods"]:
-        text += f"{mod['id']} - {mod['name']}\n"
-    await callback.message.answer(text)
-    await callback.answer()
-
-@dp.message(F.text.regexp(r"^\d+$"))
-async def delete_confirm(message: Message):
-    db = load_db()
-    mod_id = int(message.text)
-
-    for mod in db["mods"]:
-        if mod["id"] == mod_id:
-            db["mods"].remove(mod)
-            save_db(db)
-            return await message.answer("🗑 O‘chirildi")
-
-# ================= STAT =================
-
 @dp.callback_query(F.data == "stats")
 async def stats(callback: CallbackQuery):
     users = load_users()
@@ -226,8 +176,6 @@ async def stats(callback: CallbackQuery):
 # ================= MAIN =================
 
 async def main():
-    if not TOKEN:
-        raise ValueError("BOT_TOKEN environment variable topilmadi!")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
